@@ -191,6 +191,48 @@ static int fzip_read(const char *path, char *buf, size_t size,
 }
 
 /*
+ * Create a directory with the given name
+ */
+static int fzip_mkdir(const char *path, mode_t mode)
+{
+    return 0;
+}
+
+/*
+ * Remove the given directory
+ */
+static int fzip_rmdir(const char *path)
+{
+    return 0;
+}
+
+/*
+ * Rename the given file or directory to the given name
+ */
+static int fzip_rename(const char *from, const char *to)
+{
+    return 0;
+}
+
+/*
+ * Truncate or extend the given file so that it is the given size
+ */
+static int fzip_truncate(const char *path, off_t size)
+{
+    return 0;
+}
+
+/*
+ * Writes size byets from the given buffer to the given file beginning
+ * at offset
+ * Return the number of bytes written (cannot be 0)
+ */
+static int fzip_write(const char* path, const char *buf, size_t size, off_t offset, struct fuse_file_info* fi)
+{
+    return 0;
+}
+
+/*
  * Contains the set of valid fuse operations for this file system
  */
 static struct fuse_operations fzip_oper = {
@@ -198,6 +240,11 @@ static struct fuse_operations fzip_oper = {
     .readdir        = fzip_readdir,
     .open           = fzip_open,
     .read           = fzip_read,
+    .mkdir          = fzip_mkdir,
+    .rmdir          = fzip_rmdir,
+    .rename         = fzip_rename,
+    .truncate       = fzip_truncate,
+    .write          = fzip_write,
 };
 
 int main(int argc, char *argv[])
