@@ -233,6 +233,15 @@ static int fzip_write(const char* path, const char *buf, size_t size, off_t offs
 }
 
 /*
+ * Removes the given file
+ */
+static int fzip_unlink(const char* path)
+{
+    // TODO also remove it from contents and realloc to match size
+    return 0;
+}
+
+/*
  * Contains the set of valid fuse operations for this file system
  */
 static struct fuse_operations fzip_oper = {
@@ -245,6 +254,7 @@ static struct fuse_operations fzip_oper = {
     .rename         = fzip_rename,
     .truncate       = fzip_truncate,
     .write          = fzip_write,
+    .unlink         = fzip_unlink,
 };
 
 int main(int argc, char *argv[])
