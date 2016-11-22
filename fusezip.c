@@ -11,14 +11,15 @@
 
 #define FUSE_USE_VERSION 26
 
-#include <fuse.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <regex.h>
 
 #include <zip.h>
+#include <fuse.h>
 
 #include "fusezip.h"
 
@@ -38,22 +39,24 @@ static enum file_t fzip_file_type(const char *path)
 
 static void split_path(const char* path, struct element* e)
 {
-    char* p = strdup(path);
-    const char* parent = "";
-    const char* file = "";
-    char* token = strtok(p, "/");
+    regex_t re;
+    regmatch_t match[4];
 
-    while ( token != NULL )
-    {
-        parent = file;
-        file = token;
-        token = strtok(NULL, "/");
-    }
+    regcomp(&re, "^(/?.*/)*?([^/]+)/?$", REG_EXTENDED);
 
-    e->name = strdup(file);
-    e->parent = strdup(parent);
+    regexec(&re, path, 4, match, 0);
 
-    free(p);
+    char* parent = malloc(match[1].rm_eo - match[1].rm_so);
+    if (match[1].rm_so != -1)
+        memcpy(parent, path + match[1].rm_so, match[1].rm_eo - match[1].rm_so);
+    parent[match[1].rm_eo - match[1].rm_so - 1] = '\0';
+    char* name = malloc(match[2].rm_eo - match[2].rm_so + 1);
+    if (match[2].rm_so != -1)
+        memcpy(name, path + match[2].rm_so, match[2].rm_eo - match[2].rm_so);
+    name[match[2].rm_eo - match[2].rm_so] = '\0';
+
+    e->parent = parent;
+    e->name = name;
 }
 
 /*
@@ -100,7 +103,8 @@ static int fzip_getattr(const char *path, struct stat *stbuf)
 
     for (int i = 0; i < entries; i++)
     {
-        if (strcmp(contents[i].name, e.name) == 0)
+        if (strcmp(contents[i].name, e.name) == 0 &&
+            strcmp(contents[i].parent, e.parent + 1) == 0)
         {
             switch (contents[i].type)
             {
@@ -194,7 +198,6 @@ static struct fuse_operations fzip_oper = {
     .readdir        = fzip_readdir,
     .open           = fzip_open,
     .read           = fzip_read,
-    .write          = fzip_write,
 };
 
 int main(int argc, char *argv[])
