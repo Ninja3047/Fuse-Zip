@@ -1,5 +1,12 @@
+Fuse Zip
+========
 
-References:
+A zip file system implementation using libfuse and libzip.
+
+At its current state, it is read-only.
+
+References
+==========
 
 https://github.com/libfuse/libfuse/blob/master/example/hello.c
 http://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/html/
