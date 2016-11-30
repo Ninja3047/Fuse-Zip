@@ -145,7 +145,7 @@ static int fzip_readdir(const char* path, void* buf, fuse_fill_dir_t filler,
         struct stat st;
         memset(&st, 0, sizeof(st));
         fzip_getattr(path, &st);
-        if (strcmp(path + 1, contents[i].parent) == 0) 
+        if (strcmp(path + 1, contents[i].parent) == 0)
             if (filler(buf, contents[i].name, &st, 0))
                 break;
     }
@@ -195,6 +195,7 @@ static int fzip_read(const char *path, char *buf, size_t size,
  */
 static int fzip_mkdir(const char *path, mode_t mode)
 {
+    // zip_dir_add
     return 0;
 }
 
@@ -203,6 +204,7 @@ static int fzip_mkdir(const char *path, mode_t mode)
  */
 static int fzip_rmdir(const char *path)
 {
+    // zip_delete
     return 0;
 }
 
@@ -211,6 +213,13 @@ static int fzip_rmdir(const char *path)
  */
 static int fzip_rename(const char *from, const char *to)
 {
+    zip_int64_t index = zip_name_locate(ziparchive, from + 1, 0);
+    if (zip_file_rename(ziparchive, index, to, 0)  == -1)
+        return -errno;
+    
+    contents[index].name = to;
+    // TODO parents aren't renamed
+
     return 0;
 }
 
@@ -219,6 +228,10 @@ static int fzip_rename(const char *from, const char *to)
  */
 static int fzip_truncate(const char *path, off_t size)
 {
+    // zip_source_buffer
+    // zip_name_locate
+    // zip_file_replace
+    // zip_source_free
     return 0;
 }
 
@@ -229,7 +242,11 @@ static int fzip_truncate(const char *path, off_t size)
  */
 static int fzip_write(const char* path, const char *buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
-    return 0;
+    // zip_source_buffer
+    // zip_name_locate
+    // zip_file_add (replace)
+    // zip_source_free
+    return size;
 }
 
 /*
@@ -238,6 +255,28 @@ static int fzip_write(const char* path, const char *buf, size_t size, off_t offs
 static int fzip_unlink(const char* path)
 {
     // TODO also remove it from contents and realloc to match size
+    // zip_delete
+    return 0;
+}
+
+/*
+ * Returns 0 if file exists, otherwise it returns -ENOENT
+ */
+static int fzip_access(const char* path, int mask)
+{
+    // TODO implementation
+    return 0;
+}
+
+static int fzip_statfs(const char* path, struct statvf* stbuf)
+{
+    // TODO implementation
+    return 0;
+}
+
+static int fzip_utimens(const char* path, const struct timespec ts[2])
+{
+    // TODO implementation
     return 0;
 }
 
@@ -245,6 +284,7 @@ static int fzip_unlink(const char* path)
  * Contains the set of valid fuse operations for this file system
  */
 static struct fuse_operations fzip_oper = {
+    .access         = fzip_access,
     .getattr        = fzip_getattr,
     .readdir        = fzip_readdir,
     .open           = fzip_open,
@@ -255,6 +295,8 @@ static struct fuse_operations fzip_oper = {
     .truncate       = fzip_truncate,
     .write          = fzip_write,
     .unlink         = fzip_unlink,
+    .statfs         = fzip_statfs,
+    .utimens        = fzip_utimens,
 };
 
 int main(int argc, char *argv[])
