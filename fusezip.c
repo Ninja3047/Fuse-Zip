@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libgen.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <regex.h>
@@ -24,61 +25,30 @@
 #include "fusezip.h"
 
 static zip_t* ziparchive;
-struct element* contents;
 
 /*
  * Get file type
  */
-static enum file_t fzip_file_type(const char *path)
+static enum file_t fzip_file_type(const char* path)
 {
-    if (strrchr(path, '/') == path+strlen(path)-1)
-        return ZIP_FOLDER; // ends with /. then it is a folder
-    else
+    if (strcmp(path, "/") == 0)
+        return ZIP_FOLDER;
+
+    char search[strlen(path)];
+    strcpy(search, path+1);
+    search[strlen(path)] = 0;
+
+    search[strlen(path) - 1] = '/';
+    int r1 = zip_name_locate(ziparchive, search, 0);
+    search[strlen(path) - 1] = 0;
+    int r2 = zip_name_locate(ziparchive, search, 0);
+
+    if (r1 != -1)
+        return ZIP_FOLDER;
+    else if (r2 != -1)
         return ZIP_FILE;
-}
-
-static void split_path(const char* path, struct element* e)
-{
-    regex_t re;
-    regmatch_t match[4];
-
-    regcomp(&re, "^(/?.*/)*?([^/]+)/?$", REG_EXTENDED);
-
-    regexec(&re, path, 4, match, 0);
-
-    char* parent = malloc(match[1].rm_eo - match[1].rm_so);
-    if (match[1].rm_so != -1)
-        memcpy(parent, path + match[1].rm_so, match[1].rm_eo - match[1].rm_so);
-    parent[match[1].rm_eo - match[1].rm_so - 1] = '\0';
-    char* name = malloc(match[2].rm_eo - match[2].rm_so + 1);
-    if (match[2].rm_so != -1)
-        memcpy(name, path + match[2].rm_so, match[2].rm_eo - match[2].rm_so);
-    name[match[2].rm_eo - match[2].rm_so] = '\0';
-
-    e->parent = parent;
-    e->name = name;
-}
-
-/*
- * Initialize elements with contents of zip archive
- */
-static int init_contents()
-{
-    int entries = zip_get_num_entries(ziparchive, 0);
-    contents = malloc(entries * sizeof(struct element));
-    // TODO Free this somewhere
-    // TODO realloc when adding new stuff
-
-    for(int i = 0; i < entries; i++)
-    {
-        struct zip_stat sb;
-        zip_stat_index(ziparchive, i, 0, &sb);
-        contents[i].type = fzip_file_type(sb.name);
-        contents[i].size = sb.size;
-        split_path(sb.name, &contents[i]);
-    }
-
-    return entries;
+    else
+        return -1;
 }
 
 /*
@@ -96,32 +66,24 @@ static int fzip_getattr(const char *path, struct stat *stbuf)
         return 0;
     }
 
-    struct element e;
-    int entries = zip_get_num_entries(ziparchive, 0);
+    zip_stat_t sb;
 
-    split_path(path, &e);
+    zip_stat_index(ziparchive, zip_name_locate(ziparchive, path+1, 0), 0, &sb);
 
-    for (int i = 0; i < entries; i++)
+    switch (fzip_file_type(path))
     {
-        if (strcmp(contents[i].name, e.name) == 0 &&
-            strcmp(contents[i].parent, e.parent + 1) == 0)
-        {
-            switch (contents[i].type)
-            {
-                case ZIP_FILE:
-                    stbuf->st_mode = S_IFREG | 0666;
-                    stbuf->st_nlink = 1;
-                    stbuf->st_size = contents[i].size;
-                    break;
-                case ZIP_FOLDER:
-                    stbuf->st_mode = S_IFDIR | 0755;
-                    stbuf->st_nlink = 2;
-                    stbuf->st_size = 1;
-                    break;
-                default:
-                    return -ENOENT;
-            }
-        }
+        case ZIP_FILE:
+            stbuf->st_mode = S_IFREG | 0666;
+            stbuf->st_nlink = 1;
+            stbuf->st_size = sb.size;
+            break;
+        case ZIP_FOLDER:
+            stbuf->st_mode = S_IFDIR | 0755;
+            stbuf->st_nlink = 2;
+            stbuf->st_size = 0;
+            break;
+        default:
+            return -ENOENT;
     }
 
     return 0;
@@ -140,14 +102,32 @@ static int fzip_readdir(const char* path, void* buf, fuse_fill_dir_t filler,
 
     filler(buf, ".", NULL, 0);
     filler(buf, "..", NULL, 0);
+
     for (int i = 0; i < zip_get_num_entries(ziparchive, 0); i++)
     {
         struct stat st;
         memset(&st, 0, sizeof(st));
-        fzip_getattr(path, &st);
-        if (strcmp(path + 1, contents[i].parent) == 0)
-            if (filler(buf, contents[i].name, &st, 0))
+        zip_stat_t sb;
+        zip_stat_index(ziparchive, i, 0, &sb);
+
+        char* zippath = malloc(strlen(sb.name) + 2);
+        *zippath = '/';
+        strcpy(zippath + 1, sb.name);
+
+        char* dpath = strdup(zippath);
+        char* bpath = strdup(zippath);
+
+        if (strcmp(path, dirname(dpath)) == 0)
+        {
+            fzip_getattr(zippath, &st);
+            char* name = basename(bpath);
+            if (filler(buf, name, &st, 0))
                 break;
+        }
+
+        free(zippath);
+        free(dpath);
+        free(bpath);
     }
 
     return 0;
@@ -172,7 +152,7 @@ static int fzip_open(const char *path, struct fuse_file_info *fi)
  * Read a file
  */
 static int fzip_read(const char *path, char *buf, size_t size,
-                     off_t offset, struct fuse_file_info* fi)
+        off_t offset, struct fuse_file_info* fi)
 {
     printf("read: %s offset: %lu\n", path, offset);
     int res;
@@ -216,8 +196,8 @@ static int fzip_rename(const char *from, const char *to)
     zip_int64_t index = zip_name_locate(ziparchive, from + 1, 0);
     if (zip_file_rename(ziparchive, index, to, 0)  == -1)
         return -errno;
-    
-    contents[index].name = to;
+
+    //contents[index].name = to;
     // TODO parents aren't renamed
 
     return 0;
@@ -309,6 +289,5 @@ int main(int argc, char *argv[])
     {
         fuseargv[i] = argv[i+1];
     }
-    init_contents();
     return fuse_main(argc-1, fuseargv, &fzip_oper, NULL);
 }
