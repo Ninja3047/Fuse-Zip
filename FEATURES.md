@@ -14,4 +14,5 @@ Implemented FUSE Features
 .write    // write buffer to file
 .unlink   // delete file
 .rmdir    // delete directory
+.utimens  // update file modification time
 ```
