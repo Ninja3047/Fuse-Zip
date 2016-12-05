@@ -27,6 +27,9 @@
 static zip_t* ziparchive;
 static char* zipname;
 
+/*
+ * Append a slash to the given path
+ */
 static char* append_slash(const char* path)
 {
     char* search = malloc(strlen(path) + 2);
@@ -355,6 +358,13 @@ static int fzip_utimens(const char* path, const struct timespec ts[2])
     return 0;
 }
 
+static void fzip_destroy(void* private_data)
+{
+    (void) private_data;
+
+    zip_close(ziparchive);
+}
+
 /*
  * Contains the set of valid fuse operations for this file system
  */
@@ -372,18 +382,17 @@ static struct fuse_operations fzip_oper = {
     .unlink         = fzip_unlink,
     .rmdir          = fzip_rmdir,
     .utimens        = fzip_utimens,
+    .destroy        = fzip_destroy,
 };
 
 int main(int argc, char *argv[])
 {
-    umask(0);
     zipname = argv[1];
     ziparchive = zip_open(zipname, 0, NULL); // open zip file
-    char* fuseargv[argc-1];
+    char* fuseargv[argc - 1];
     fuseargv[0] = argv[0];
-    for (int i = 1; i < argc-1; i++)
-    {
-        fuseargv[i] = argv[i+1];
-    }
-    return fuse_main(argc-1, fuseargv, &fzip_oper, NULL);
+    for (int i = 1; i < argc - 1; i++)
+        fuseargv[i] = argv[i + 1];
+
+    return fuse_main(argc - 1, fuseargv, &fzip_oper, NULL);
 }
