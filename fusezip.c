@@ -204,6 +204,8 @@ static int fzip_read(const char *path, char *buf, size_t size,
  */
 static int fzip_mkdir(const char *path, mode_t mode)
 {
+    printf("mkdir: %s\n", path);
+
     (void) mode;
 
     zip_dir_add(ziparchive, path + 1, 0);
@@ -219,6 +221,8 @@ static int fzip_mkdir(const char *path, mode_t mode)
  */
 static int fzip_rename(const char *from, const char *to)
 {
+    printf("rename: %s to %s \n", from, to);
+
     zip_int64_t index = zip_name_locate(ziparchive, from + 1, 0);
     if (zip_file_rename(ziparchive, index, to + 1, 0)  == -1)
         return -errno;
@@ -351,6 +355,23 @@ static int fzip_access(const char* path, int mask)
     return -ENOENT;
 }
 
+/*
+ * Updates last modified date of path in the zip file
+ */
+static int fzip_utimens(const char* path, const struct timespec ts[2])
+{
+    int i;
+    if ((i = zip_name_locate(ziparchive, path + 1, 0) < 0))
+    {
+        char* slash = append_slash(path);
+        i = zip_name_locate(ziparchive, slash + 1, 0);
+        free(slash);
+    }
+    zip_file_set_mtime(ziparchive, i, ts[1].tv_sec, 0);
+
+    return 0;
+}
+
 static void fzip_destroy(void* private_data)
 {
     (void) private_data;
@@ -375,6 +396,7 @@ static struct fuse_operations fzip_oper = {
     .unlink         = fzip_unlink,
     .rmdir          = fzip_rmdir,
     .destroy        = fzip_destroy,
+    .utimens        = fzip_utimens,
 };
 
 int main(int argc, char *argv[])
