@@ -3,7 +3,22 @@ Fuse Zip
 
 A zip file system implementation using libfuse and libzip.
 
-At its current state, it is read-only.
+How to run
+==========
+
+```
+$ make
+$ ./fusezip <zipfile> [options] <mountpoint>
+```
+
+Tips for Debugging
+==================
+```
+$ ./fusezip <zipfile> -s -f <mountpoint>
+```
+
+  -s runs in single threaded mode
+  -f displays debugging output to stdout
 
 References
 ==========
