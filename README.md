@@ -17,8 +17,10 @@ Tips for Debugging
 $ ./fusezip <zipfile> -s -f <mountpoint>
 ```
 
+```
   -s runs in single threaded mode  
   -f displays debugging output to stdout  
+```
 
 References
 ==========
