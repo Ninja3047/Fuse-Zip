@@ -361,15 +361,19 @@ static int fzip_access(const char* path, int mask)
 static int fzip_utimens(const char* path, const struct timespec ts[2])
 {
     int i;
-    if ((i = zip_name_locate(ziparchive, path + 1, 0) < 0))
+    int ret;
+
+    if ((i = zip_name_locate(ziparchive, path + 1, 0)) < 0)
     {
         char* slash = append_slash(path);
         i = zip_name_locate(ziparchive, slash + 1, 0);
         free(slash);
     }
-    zip_file_set_mtime(ziparchive, i, ts[1].tv_sec, 0);
+    ret = zip_file_set_mtime(ziparchive, i, ts[1].tv_sec, 0);
+    zip_close(ziparchive); // we have to close and reopen to write the changes
+    ziparchive = zip_open(zipname, 0, NULL);
 
-    return 0;
+    return ret;
 }
 
 static void fzip_destroy(void* private_data)
