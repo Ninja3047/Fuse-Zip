@@ -3,6 +3,7 @@
 
 enum file_t
 {
+    ZIP_INVALID = -1,
     ZIP_FOLDER,
     ZIP_FILE,
 };
