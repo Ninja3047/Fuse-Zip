@@ -351,20 +351,6 @@ static int fzip_access(const char* path, int mask)
     return -ENOENT;
 }
 
-/*
- * Updates the last access time of the given object from st[0] and
- * the last modifcation time from ts[1]
- */
-static int fzip_utimens(const char* path, const struct timespec ts[2])
-{
-    printf("utimens: %s access: %ld modified: %ld\n", path, ts[0].tv_sec, ts[1].tv_sec);
-
-    (void) path;
-    (void) ts;
-
-    return 0;
-}
-
 static void fzip_destroy(void* private_data)
 {
     (void) private_data;
@@ -388,7 +374,6 @@ static struct fuse_operations fzip_oper = {
     .write          = fzip_write,
     .unlink         = fzip_unlink,
     .rmdir          = fzip_rmdir,
-    .utimens        = fzip_utimens,
     .destroy        = fzip_destroy,
 };
 
