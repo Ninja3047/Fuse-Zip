@@ -36,6 +36,8 @@ static char* zipname;
 
 /*
  * Append a slash to the given path
+ * @param path a path to append a slash to
+ * @return a pointer to a new string with a slash
  */
 static char* append_slash(const char* path)
 {
@@ -49,6 +51,8 @@ static char* append_slash(const char* path)
 
 /*
  * Get file type
+ * @param a path
+ * @return the file type as an enum
  */
 static enum file_t fzip_file_type(const char* path)
 {
@@ -70,7 +74,10 @@ static enum file_t fzip_file_type(const char* path)
 }
 
 /*
- * Get file attributes
+ * Get file attributes by populating stbuf
+ * @param path
+ * @param stbuf
+ * @return 0 on success, -EONENT on failure
  */
 static int fzip_getattr(const char *path, struct stat *stbuf)
 {
@@ -91,23 +98,23 @@ static int fzip_getattr(const char *path, struct stat *stbuf)
 
     switch (fzip_file_type(path))
     {
-        case ZIP_FILE:
-            zip_stat(ziparchive, path + 1, 0, &sb);
-            stbuf->st_mode = S_IFREG | 0666;
-            stbuf->st_nlink = 1;
-            stbuf->st_size = sb.size;
-            stbuf->st_mtime = sb.mtime;
-            break;
-        case ZIP_FOLDER:
-            zip_stat(ziparchive, slash, 0, &sb);
-            stbuf->st_mode = S_IFDIR | 0755;
-            stbuf->st_nlink = 2;
-            stbuf->st_size = 0;
-            stbuf->st_mtime = sb.mtime;
-            break;
-        default:
-            free(slash);
-            return -ENOENT;
+    case ZIP_FILE:
+        zip_stat(ziparchive, path + 1, 0, &sb);
+        stbuf->st_mode = S_IFREG | 0666;
+        stbuf->st_nlink = 1;
+        stbuf->st_size = sb.size;
+        stbuf->st_mtime = sb.mtime;
+        break;
+    case ZIP_FOLDER:
+        zip_stat(ziparchive, slash, 0, &sb);
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+        stbuf->st_size = 0;
+        stbuf->st_mtime = sb.mtime;
+        break;
+    default:
+        free(slash);
+        return -ENOENT;
     }
 
     free(slash);
@@ -116,6 +123,12 @@ static int fzip_getattr(const char *path, struct stat *stbuf)
 
 /*
  * Read files in given directory
+ * @param path a path to a directory
+ * @param buf a buffer to populate
+ * @param filler function used to help populate the buffer
+ * @param offset unused
+ * @param fi unused
+ * @return 0 on success
  */
 static int fzip_readdir(const char* path, void* buf, fuse_fill_dir_t filler,
                         off_t offset, struct fuse_file_info* fi)
@@ -161,6 +174,8 @@ static int fzip_readdir(const char* path, void* buf, fuse_fill_dir_t filler,
 
 /*
  * Open a file
+ * @param path a file path
+ * @param fi unused
  */
 static int fzip_open(const char *path, struct fuse_file_info *fi)
 {
@@ -176,9 +191,14 @@ static int fzip_open(const char *path, struct fuse_file_info *fi)
 
 /*
  * Read a file
+ * @param path a file path
+ * @param buf a buffer to output the contents of the file
+ * @param size the size to read
+ * @param offset the offset to read at
+ * @param fi unused
  */
 static int fzip_read(const char *path, char *buf, size_t size,
-        off_t offset, struct fuse_file_info* fi)
+                     off_t offset, struct fuse_file_info* fi)
 {
     printf("read: %s offset: %lu\n", path, offset);
     int res;
@@ -201,6 +221,9 @@ static int fzip_read(const char *path, char *buf, size_t size,
 
 /*
  * Create a directory with the given name
+ * @param path a path to create the directory at
+ * @param mode the mode to create the directory with
+ * @return 0 on success
  */
 static int fzip_mkdir(const char *path, mode_t mode)
 {
@@ -218,6 +241,9 @@ static int fzip_mkdir(const char *path, mode_t mode)
 
 /*
  * Rename the given file or directory to the given name
+ * @param from the path to the file or directory to rename
+ * @param to the new name of the file or directory
+ * @return 0 on success
  */
 static int fzip_rename(const char *from, const char *to)
 {
@@ -225,7 +251,7 @@ static int fzip_rename(const char *from, const char *to)
 
     zip_int64_t index = zip_name_locate(ziparchive, from + 1, 0);
     if (zip_file_rename(ziparchive, index, to + 1, 0)  == -1)
-        return -errno;
+        return -ENOENT;
 
     zip_close(ziparchive); // we have to close and reopen to write the changes
     ziparchive = zip_open(zipname, 0, NULL);
@@ -234,6 +260,9 @@ static int fzip_rename(const char *from, const char *to)
 
 /*
  * Truncate or extend the given file so that it is the given size
+ * @param path a file path
+ * @param size the new size to truncate or extend the file
+ * @return 0 on success
  */
 static int fzip_truncate(const char *path, off_t size)
 {
@@ -251,7 +280,7 @@ static int fzip_truncate(const char *path, off_t size)
     zip_source_t *s;
 
     if ((s = zip_source_buffer(ziparchive, tbuf, size, 0)) == NULL ||
-        zip_file_add(ziparchive, path+1, s, ZIP_FL_OVERWRITE) < 0)
+            zip_file_add(ziparchive, path+1, s, ZIP_FL_OVERWRITE) < 0)
     {
         zip_source_free(s);
         printf("Error adding file %s\n", path);
@@ -267,11 +296,17 @@ static int fzip_truncate(const char *path, off_t size)
 /*
  * Writes size bytes from the given buffer to the given file beginning
  * at offset
- * Return the number of bytes written (cannot be 0)
+ * @param path a file path
+ * @param buf a buffer to write to a file
+ * @param size the size of the buffer
+ * @param offset the offset to write to
+ * @param fi unused
+ * @return the number of bytes written
  */
 static int fzip_write(const char* path, const char *buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
     printf("write: %s buf: %s, size: %ld offset: %ld\n", path, buf, size, offset);
+
     (void) fi;
 
     zip_source_t *s;
@@ -286,7 +321,7 @@ static int fzip_write(const char* path, const char *buf, size_t size, off_t offs
     }
 
     if ((s = zip_source_buffer(ziparchive, tbuf, size + offset, 0)) == NULL ||
-        zip_file_add(ziparchive, path+1, s, ZIP_FL_OVERWRITE) < 0)
+            zip_file_add(ziparchive, path+1, s, ZIP_FL_OVERWRITE) < 0)
     {
         zip_source_free(s);
         printf("Error adding file %s\n", path);
@@ -301,10 +336,15 @@ static int fzip_write(const char* path, const char *buf, size_t size, off_t offs
 
 /*
  * Create a file at the given path
+ * @param path a file path
+ * @param mode the file type and permission
+ * @param rdev unused
+ * @return 0 on success
  */
 static int fzip_mknod(const char* path, mode_t mode, dev_t rdev)
 {
     printf("mknod: %s mode: %u\n", path, mode);
+
     (void) rdev;
 
     if (mode & S_IFREG)
@@ -317,10 +357,13 @@ static int fzip_mknod(const char* path, mode_t mode, dev_t rdev)
 
 /*
  * Removes the given file
+ * @param path a file path
+ * @return 0 on success
  */
 static int fzip_unlink(const char* path)
 {
     printf("unlink: %s\n", path);
+
     int ret = zip_delete(ziparchive, zip_name_locate(ziparchive, path + 1, 0));
     zip_close(ziparchive); // we have to close and reopen to write the changes
     ziparchive = zip_open(zipname, 0, NULL);
@@ -329,6 +372,8 @@ static int fzip_unlink(const char* path)
 
 /*
  * Remove the given directory
+ * @param path a directory path
+ * @return 0 on success
  */
 static int fzip_rmdir(const char *path)
 {
@@ -341,7 +386,10 @@ static int fzip_rmdir(const char *path)
 }
 
 /*
- * Returns 0 if file exists, otherwise it returns -ENOENT
+ * Determines if path can be accessed
+ * @param path a path
+ * @param mask unused
+ * @return 0 if path can be accessed, otherwise return -ENOENT
  */
 static int fzip_access(const char* path, int mask)
 {
@@ -357,9 +405,15 @@ static int fzip_access(const char* path, int mask)
 
 /*
  * Updates last modified date of path in the zip file
+ * @param path a path
+ * @param ts a timespec struct array where the first timespec is last accessed time
+ * and the second timespec is the last modified time
+ * @return 0 on success
  */
 static int fzip_utimens(const char* path, const struct timespec ts[2])
 {
+    printf("utimens: %s mtime: %ld\n", path, ts[1].tv_sec);
+
     int i;
     int ret;
 
@@ -386,7 +440,8 @@ static void fzip_destroy(void* private_data)
 /*
  * Contains the set of valid fuse operations for this file system
  */
-static struct fuse_operations fzip_oper = {
+static struct fuse_operations fzip_oper =
+{
     .access         = fzip_access,
     .getattr        = fzip_getattr,
     .readdir        = fzip_readdir,
