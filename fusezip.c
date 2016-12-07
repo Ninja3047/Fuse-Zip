@@ -210,7 +210,8 @@ static int fzip_read(const char *path, char *buf, size_t size,
     zip_stat(ziparchive, path + 1, 0, &sb);
     zip_file_t* file = zip_fopen(ziparchive, path + 1, 0);
 
-    char temp[sb.size];
+    char temp[sb.size + size + offset];
+    memset(temp, 0, sb.size + size + offset);
 
     res = zip_fread(file, temp, sb.size);
 
