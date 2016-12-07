@@ -204,16 +204,20 @@ static int fzip_read(const char *path, char *buf, size_t size,
     int res;
     (void) fi;
 
+    zip_stat_t sb;
+    zip_stat_init(&sb);
+
+    zip_stat(ziparchive, path + 1, 0, &sb);
     zip_file_t* file = zip_fopen(ziparchive, path + 1, 0);
 
-    if (file == 0)
-        return -1;
+    char temp[sb.size];
 
-    res = zip_fread(file, buf, size);
+    res = zip_fread(file, temp, sb.size);
 
     if (res == -1)
-        res = -ENOENT;
+        return -ENOENT;
 
+    memcpy(buf, temp + offset, size);
     zip_fclose(file);
 
     return size;
