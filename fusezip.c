@@ -474,6 +474,11 @@ int main(int argc, char *argv[])
 {
     zipname = argv[1];
     ziparchive = zip_open(zipname, 0, NULL); // open zip file
+    if (!ziparchive)
+    {
+        printf("Error opening file\n");
+        return -1;
+    }
     char* fuseargv[argc - 1];
     fuseargv[0] = argv[0];
     for (int i = 1; i < argc - 1; i++)
