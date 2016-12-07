@@ -100,7 +100,7 @@ static int fzip_getattr(const char *path, struct stat *stbuf)
     {
     case ZIP_FILE:
         zip_stat(ziparchive, path + 1, 0, &sb);
-        stbuf->st_mode = S_IFREG | 0666;
+        stbuf->st_mode = S_IFREG | 0777;
         stbuf->st_nlink = 1;
         stbuf->st_size = sb.size;
         stbuf->st_mtime = sb.mtime;
