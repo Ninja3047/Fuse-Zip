@@ -310,18 +310,22 @@ static int fzip_write(const char* path, const char *buf, size_t size, off_t offs
     (void) fi;
 
     zip_source_t *s;
+    zip_stat_t sb;
+    zip_stat_init(&sb);
+    zip_stat(ziparchive, path + 1, 0, &sb);
 
-    char tbuf[size + offset];
-    if (zip_name_locate(ziparchive, path + 1, 0) > 0)
+    char tbuf[sb.size + size + offset];
+    memset(tbuf, 0, sb.size + size + offset);
+    zip_file_t *f = zip_fopen(ziparchive, path + 1, 0);
+    if (f != NULL)
     {
-        zip_file_t *f = zip_fopen(ziparchive, path + 1, 0);
-        zip_fread(f, tbuf, offset);
-        memcpy(tbuf + offset, buf, size);
+        zip_fread(f, tbuf, sb.size);
         zip_fclose(f);
     }
+    memcpy(tbuf + offset, buf, size);
 
-    if ((s = zip_source_buffer(ziparchive, tbuf, size + offset, 0)) == NULL ||
-            zip_file_add(ziparchive, path+1, s, ZIP_FL_OVERWRITE) < 0)
+    if ((s = zip_source_buffer(ziparchive, tbuf, sb.size + size + offset, 0)) == NULL ||
+            zip_file_add(ziparchive, path + 1, s, ZIP_FL_OVERWRITE) < 0)
     {
         zip_source_free(s);
         printf("Error adding file %s\n", path);
@@ -347,9 +351,17 @@ static int fzip_mknod(const char* path, mode_t mode, dev_t rdev)
 
     (void) rdev;
 
-    if (mode & S_IFREG)
+    if ((mode & S_IFREG) == S_IFREG)
     {
-        fzip_write(path, NULL, 0, 0, NULL);
+        zip_source_t *s;
+
+        if ((s = zip_source_buffer(ziparchive, NULL, 0, 0)) == NULL ||
+                zip_file_add(ziparchive, path + 1, s, ZIP_FL_OVERWRITE) < 0)
+        {
+            zip_source_free(s);
+            printf("Error adding file %s\n", path);
+            return 0;
+        }
     }
 
     return 0;
